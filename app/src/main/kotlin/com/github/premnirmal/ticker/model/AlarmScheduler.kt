@@ -17,6 +17,7 @@ import com.github.premnirmal.ticker.AppPreferences
 import com.github.premnirmal.ticker.components.AppClock
 import com.github.premnirmal.ticker.notifications.DailySummaryNotificationReceiver
 import com.github.premnirmal.ticker.widget.RefreshReceiver
+import org.threeten.bp.DayOfWeek
 import org.threeten.bp.Duration
 import org.threeten.bp.Instant
 import org.threeten.bp.ZoneId
@@ -36,6 +37,39 @@ class AlarmScheduler @Inject constructor(
   private val clock: AppClock,
   private val workManager: WorkManager
 ) {
+
+  fun isCurrentTimeWithinScheduledUpdateTime(): Boolean {
+    var dayOfWeek = clock.todayLocal()
+      .dayOfWeek
+    val startTimez = appPreferences.startTime()
+    val endTimez = appPreferences.endTime()
+    // whether the start time is after the end time e.g. start time is 11pm and end time is 5am
+    val inverse =
+      startTimez.hour > endTimez.hour || (startTimez.hour == endTimez.hour && startTimez.minute > endTimez.minute)
+    val now: ZonedDateTime = clock.todayZoned()
+    var startTime = clock.todayZoned()
+      .withHour(startTimez.hour)
+      .withMinute(startTimez.minute)
+    var endTime = clock.todayZoned()
+      .withHour(endTimez.hour)
+      .withMinute(endTimez.minute)
+    if (inverse) {
+      if (now.isBefore(startTime)) {
+        startTime = startTime.minusDays(1)
+      }
+    }
+    val selectedDaysOfWeek = appPreferences.updateDays()
+
+    if (inverse && now.isBefore(startTime)) {
+      var dayOfWeekInt = dayOfWeek.value
+      if (dayOfWeekInt == 1) {
+        dayOfWeekInt = 7
+      } else dayOfWeekInt--
+      dayOfWeek = DayOfWeek.of(dayOfWeekInt)
+    }
+    return now.isBefore(endTime) && (now.isAfter(startTime) || now.isEqual(startTime))
+      && selectedDaysOfWeek.contains(dayOfWeek)
+  }
 
   /**
    * Takes care of weekends and after hours
